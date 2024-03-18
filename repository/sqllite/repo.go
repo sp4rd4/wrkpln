@@ -1,0 +1,100 @@
+package sqllite
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/google/uuid"
+	"github.com/sp4rd4/wrkpln/planning"
+	driver "gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+type DB struct {
+	*gorm.DB
+}
+
+func New(dbFilepath, schema string) (DB, error) {
+	db, err := gorm.Open(driver.Open(dbFilepath))
+	if err != nil {
+		return DB{}, fmt.Errorf("open db: %w", err)
+	}
+	schemaSQL, err := os.ReadFile(schema)
+	if err != nil {
+		return DB{}, fmt.Errorf("read db schema: %w", err)
+	}
+	res := db.Exec(string(schemaSQL))
+	if res.Error != nil {
+		return DB{}, fmt.Errorf("load db schema: %w", err)
+	}
+	return DB{db}, nil
+}
+
+func (db DB) CreateWorker(ctx context.Context, worker planning.Worker) error {
+	res := db.WithContext(ctx).Create(worker)
+	if res.Error != nil {
+		return fmt.Errorf("create worker: %w", res.Error)
+	}
+	return nil
+}
+
+func (db DB) Worker(ctx context.Context, id uuid.UUID) (planning.Worker, error) {
+	worker := planning.Worker{}
+	res := db.WithContext(ctx).Take(&worker, "id = ?", id)
+	switch {
+	case errors.Is(res.Error, gorm.ErrRecordNotFound):
+		return planning.Worker{}, planning.ErrNoRecord
+	case res.Error == nil:
+		return planning.Worker{}, fmt.Errorf("get worker: %w", res.Error)
+	default:
+		return worker, nil
+	}
+}
+
+func (db DB) Workers(ctx context.Context, filter planning.WorkersFilter) ([]planning.Worker, error) {
+	workers := []planning.Worker{}
+	query := db.WithContext(ctx)
+	if filter.Name != nil {
+		query = query.Where("name LIKE ?", "%"+*filter.Name+"%")
+	}
+
+	res := query.Find(&workers)
+	if res.Error != nil {
+		return nil, fmt.Errorf("list workers: %w", res.Error)
+	}
+	return workers, nil
+}
+
+func (db DB) CreateShift(ctx context.Context, shift planning.Shift) error {
+	res := db.WithContext(ctx).Create(shift)
+	if res.Error != nil {
+		return fmt.Errorf("create shift: %w", res.Error)
+	}
+	return nil
+}
+
+func (db DB) Shifts(ctx context.Context, filter planning.ShiftsFilter) ([]planning.Shift, error) {
+	shifts := []planning.Shift{}
+	query := db.WithContext(ctx)
+	if filter.Date != nil {
+		query = query.Where("date = ?", *filter.Date)
+	}
+	if filter.WorkerID != nil {
+		query = query.Where("worker_id = ?", *filter.WorkerID)
+	}
+
+	res := query.Find(&shifts)
+	if res.Error != nil {
+		return nil, fmt.Errorf("list shifts: %w", res.Error)
+	}
+	return shifts, nil
+}
+
+func (db DB) Transaction(ctx context.Context, action func(planning.Repository) error) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txDB := DB{tx}
+		return action(txDB)
+	})
+}

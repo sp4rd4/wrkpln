@@ -16,12 +16,12 @@ func (e Error) Error() string {
 
 const (
 	ErrDayAlreadyBooked = Error("day_already_booked")
+	ErrNoRecord         = Error("no_record")
 )
 
 type Worker struct {
-	ID     uuid.UUID `json:"id"`
-	Name   string    `json:"name" binding:"required"`
-	Shifts []Shift   `json:"shifts"`
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name" binding:"required"`
 }
 
 type WorkersFilter struct {
@@ -49,7 +49,7 @@ type Repository interface {
 	CreateShift(ctx context.Context, shift Shift) error
 	Shifts(ctx context.Context, filter ShiftsFilter) ([]Shift, error)
 
-	Transaction(func(Repository) error) error
+	Transaction(ctx context.Context, action func(Repository) error) error
 }
 
 type Planner struct {
@@ -82,7 +82,7 @@ func (p Planner) Workers(ctx context.Context, filter WorkersFilter) ([]Worker, e
 
 func (p Planner) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
 	shift.ID = uuid.New()
-	err := p.repo.Transaction(func(repo Repository) error {
+	err := p.repo.Transaction(ctx, func(repo Repository) error {
 		shifts, err := repo.Shifts(ctx, ShiftsFilter{WorkerID: &shift.WorkerID, Date: &shift.Date})
 		if err != nil {
 			return fmt.Errorf("list shifts: %w", err)
