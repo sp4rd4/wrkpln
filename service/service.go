@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/sp4rd4/wrkpln/config"
-	"github.com/sp4rd4/wrkpln/handler"
+	handler "github.com/sp4rd4/wrkpln/handler/http"
 	"golang.org/x/sync/errgroup"
 )
 
