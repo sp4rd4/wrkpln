@@ -6,6 +6,8 @@ require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/gin-gonic/gin v1.9.1
 	github.com/samber/slog-gin v1.10.3
+	github.com/stretchr/testify v1.9.0
+	go.uber.org/mock v0.4.0
 	golang.org/x/sync v0.6.0
 	gorm.io/driver/sqlite v1.5.5
 	gorm.io/gorm v1.25.8
@@ -42,9 +44,10 @@ require (
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-sqlite3 v1.14.17 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

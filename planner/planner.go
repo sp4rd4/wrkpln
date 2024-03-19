@@ -55,24 +55,32 @@ type Repository interface {
 
 type Work struct {
 	repo Repository
+	uuid func() uuid.UUID
 }
 
-func New(repo Repository) Work {
-	return Work{repo: repo}
+type Option func(w *Work)
+
+func UUIDGenerator(gen func() uuid.UUID) Option {
+	return func(w *Work) {
+		w.uuid = gen
+	}
+}
+
+func New(repo Repository, opts ...Option) Work {
+	work := Work{
+		repo: repo,
+		uuid: func() uuid.UUID { return uuid.New() },
+	}
+	for _, opt := range opts {
+		opt(&work)
+	}
+	return work
 }
 
 func (w Work) CreateWorker(ctx context.Context, worker Worker) (Worker, error) {
-	worker.ID = uuid.New()
+	worker.ID = w.uuid()
 	if err := w.repo.CreateWorker(ctx, worker); err != nil {
 		return Worker{}, fmt.Errorf("creating worker: %w", err)
-	}
-	return worker, nil
-}
-
-func (w Work) Worker(ctx context.Context, id uuid.UUID) (Worker, error) {
-	worker, err := w.repo.Worker(ctx, id)
-	if err != nil {
-		return Worker{}, fmt.Errorf("get worker: %w", err)
 	}
 	return worker, nil
 }
@@ -86,12 +94,14 @@ func (w Work) Workers(ctx context.Context, filter WorkersFilter) ([]Worker, erro
 }
 
 func (w Work) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
-	shift.ID = uuid.New()
+	shift.ID = w.uuid()
 	shift.Date = time.Date(
 		shift.Date.Year(), shift.Date.Month(), shift.Date.Day(),
 		0, 0, 0, 0, time.UTC,
 	)
 	err := w.repo.Transaction(ctx, func(repo Repository) error {
+		// we can rely on foreign key constraint here,
+		// but it'll ties business logic to repository implementation
 		_, err := repo.Worker(ctx, shift.WorkerID)
 		if errors.Is(err, ErrNoRecord) {
 			return fmt.Errorf("worker: %w", ErrNoRecord)
