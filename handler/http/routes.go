@@ -10,11 +10,10 @@ import (
 
 func setRoutes(handler PlanningHandler, logger *slog.Logger) {
 	handler.Use(sloggin.New(logger), gin.Recovery())
-	handler.POST("/worker", handler.CreateWorker, ContentTypeCheck)
-	handler.GET("/worker/:id", handler.Worker)
+	handler.POST("/worker", ContentTypeCheck, handler.CreateWorker)
 	handler.GET("/workers", handler.Workers)
 
-	handler.POST("/shift", handler.CreateShift, ContentTypeCheck)
+	handler.POST("/shift", ContentTypeCheck, handler.CreateShift)
 	handler.GET("/shifts", handler.Shifts)
 
 	handler.NoRoute(func(c *gin.Context) {
@@ -27,8 +26,9 @@ func setRoutes(handler PlanningHandler, logger *slog.Logger) {
 
 func ContentTypeCheck(c *gin.Context) {
 	if c.ContentType() != "application/json" {
-		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "415 unsupported media type"})
-		return
+		c.AbortWithStatusJSON(
+			http.StatusUnsupportedMediaType,
+			gin.H{"error": "415 unsupported media type"},
+		)
 	}
-	c.Next()
 }

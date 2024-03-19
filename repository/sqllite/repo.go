@@ -46,7 +46,7 @@ func (db DB) Worker(ctx context.Context, id uuid.UUID) (planner.Worker, error) {
 	switch {
 	case errors.Is(res.Error, gorm.ErrRecordNotFound):
 		return planner.Worker{}, planner.ErrNoRecord
-	case res.Error == nil:
+	case res.Error != nil:
 		return planner.Worker{}, fmt.Errorf("get worker: %w", res.Error)
 	default:
 		return worker, nil

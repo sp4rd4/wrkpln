@@ -2,6 +2,7 @@ package planner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,8 +33,8 @@ type Shift struct {
 	ID        uuid.UUID `json:"id"`
 	WorkerID  uuid.UUID `json:"worker_id" binding:"required"`
 	Date      time.Time `json:"date" binding:"required"`
-	StartHour int       `json:"start_hour" binding:"required"`
-	EndHour   int       `json:"end_hour" binding:"required"`
+	StartHour int       `json:"start_hour" binding:"gte=0,lte=23"`
+	EndHour   int       `json:"end_hour" binding:"gte=1,lte=24,gtfield=StartHour"`
 }
 
 type ShiftsFilter struct {
@@ -86,8 +87,22 @@ func (w Work) Workers(ctx context.Context, filter WorkersFilter) ([]Worker, erro
 
 func (w Work) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
 	shift.ID = uuid.New()
+	shift.Date = time.Date(
+		shift.Date.Year(), shift.Date.Month(), shift.Date.Day(),
+		0, 0, 0, 0, time.UTC,
+	)
 	err := w.repo.Transaction(ctx, func(repo Repository) error {
-		shifts, err := repo.Shifts(ctx, ShiftsFilter{WorkerID: &shift.WorkerID, Date: &shift.Date})
+		_, err := repo.Worker(ctx, shift.WorkerID)
+		if errors.Is(err, ErrNoRecord) {
+			return fmt.Errorf("worker: %w", ErrNoRecord)
+		}
+		if err != nil {
+			return fmt.Errorf("get worker: %w", err)
+		}
+
+		shifts, err := repo.Shifts(
+			ctx, ShiftsFilter{WorkerID: &shift.WorkerID, Date: &shift.Date},
+		)
 		if err != nil {
 			return fmt.Errorf("list shifts: %w", err)
 		}
@@ -108,6 +123,13 @@ func (w Work) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
 }
 
 func (w Work) Shifts(ctx context.Context, filter ShiftsFilter) ([]Shift, error) {
+	if filter.Date != nil {
+		date := time.Date(
+			filter.Date.Year(), filter.Date.Month(), filter.Date.Day(),
+			0, 0, 0, 0, time.UTC,
+		)
+		filter.Date = &date
+	}
 	shifts, err := w.repo.Shifts(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list shift: %w", err)

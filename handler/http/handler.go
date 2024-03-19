@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/sp4rd4/wrkpln/planner"
 )
@@ -19,19 +21,18 @@ type PlanningHandler struct {
 }
 
 func New(logger *slog.Logger, plan planner.Work) PlanningHandler {
-	h := PlanningHandler{Engine: gin.New(), plan: planner.Work{}}
+	h := PlanningHandler{Engine: gin.New(), plan: plan}
 	setRoutes(h, logger)
 	return h
 }
 
 func (h PlanningHandler) CreateWorker(c *gin.Context) {
 	worker := planner.Worker{}
-	err := c.ShouldBindJSON(&worker)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if errorReturned := parseJson(c, &worker); !errorReturned {
 		return
 	}
-	worker, err = h.plan.CreateWorker(c.Request.Context(), worker)
+
+	worker, err := h.plan.CreateWorker(c.Request.Context(), worker)
 	if err != nil {
 		var planErr planner.Error
 		if errors.As(err, &planErr) {
@@ -45,29 +46,6 @@ func (h PlanningHandler) CreateWorker(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, worker)
-}
-
-func (h PlanningHandler) Worker(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	worker, err := h.plan.Worker(c.Request.Context(), id)
-	if err != nil {
-		var planErr planner.Error
-		if errors.As(err, &planErr) {
-			hadnlePlanningError(c, planErr)
-			return
-		}
-
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		slog.Error("get worker error", "error", err)
-		return
-	}
-
-	c.JSON(http.StatusOK, worker)
 }
 
 func (h PlanningHandler) Workers(c *gin.Context) {
@@ -98,12 +76,11 @@ func workersFilter(query url.Values) planner.WorkersFilter {
 
 func (h PlanningHandler) CreateShift(c *gin.Context) {
 	shift := planner.Shift{}
-	err := c.ShouldBindJSON(&shift)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if errorReturned := parseJson(c, &shift); !errorReturned {
 		return
 	}
-	shift, err = h.plan.CreateShift(c.Request.Context(), shift)
+
+	shift, err := h.plan.CreateShift(c.Request.Context(), shift)
 	if err != nil {
 		var planErr planner.Error
 		if errors.As(err, &planErr) {
@@ -155,7 +132,6 @@ func shiftsFilter(query url.Values) (planner.ShiftsFilter, error) {
 		if err != nil {
 			return planner.ShiftsFilter{}, fmt.Errorf("date: %w", err)
 		}
-		date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 		sf.Date = &date
 	}
 	return sf, nil
@@ -168,4 +144,41 @@ func hadnlePlanningError(c *gin.Context, err planner.Error) {
 	case planner.ErrNoRecord:
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	}
+}
+
+func jsonValidationError(errs validator.ValidationErrors) (string, error) {
+	buf := bytes.NewBufferString("invalid fields:")
+	for i, err := range errs {
+		if i != len(errs)-1 {
+			_, err := buf.WriteString(" " + err.Field() + ",")
+			if err != nil {
+				return "", fmt.Errorf("buffer write: %w", err)
+			}
+		}
+		_, err := buf.WriteString(" " + err.Field() + ".")
+		if err != nil {
+			return "", fmt.Errorf("buffer write: %w", err)
+		}
+	}
+	return buf.String(), nil
+}
+
+func parseJson(c *gin.Context, obj any) bool {
+	err := c.ShouldBindJSON(obj)
+	ve := validator.ValidationErrors{}
+	if errors.As(err, &ve) {
+		msg, err := jsonValidationError(ve)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			slog.Error("validate json error", "error", err)
+			return false
+		}
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": msg})
+		return false
+	}
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return false
+	}
+	return true
 }
