@@ -9,5 +9,6 @@ type Config struct {
 	WriteTimeout    time.Duration `env:"HTTP_WRITE_TIMEOUT" envDefault:"5s"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"5s"`
 	MaxHeaderBytes  int           `env:"HTTP_MAX_HEADER_BYTES" envDefault:"1048576"` //1MB
-	DBPath          string        `env:"SQLITE_DB" envDefault:"10485760"`
+	DBPath          string        `env:"SQLITE_DB" envDefault:"work_planning.db"`
+	DBSchemaPath    string        `env:"SQLITE_SCHEMA" envDefault:"db/schema.sql"`
 }

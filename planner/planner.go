@@ -1,4 +1,4 @@
-package planning
+package planner
 
 import (
 	"context"
@@ -15,8 +15,8 @@ func (e Error) Error() string {
 }
 
 const (
-	ErrDayAlreadyBooked = Error("day_already_booked")
-	ErrNoRecord         = Error("no_record")
+	ErrDayAlreadyBooked = Error("day already booked")
+	ErrNoRecord         = Error("no record")
 )
 
 type Worker struct {
@@ -52,37 +52,41 @@ type Repository interface {
 	Transaction(ctx context.Context, action func(Repository) error) error
 }
 
-type Planner struct {
+type Work struct {
 	repo Repository
 }
 
-func (p Planner) CreateWorker(ctx context.Context, worker Worker) (Worker, error) {
+func New(repo Repository) Work {
+	return Work{repo: repo}
+}
+
+func (w Work) CreateWorker(ctx context.Context, worker Worker) (Worker, error) {
 	worker.ID = uuid.New()
-	if err := p.repo.CreateWorker(ctx, worker); err != nil {
+	if err := w.repo.CreateWorker(ctx, worker); err != nil {
 		return Worker{}, fmt.Errorf("creating worker: %w", err)
 	}
 	return worker, nil
 }
 
-func (p Planner) Worker(ctx context.Context, id uuid.UUID) (Worker, error) {
-	worker, err := p.repo.Worker(ctx, id)
+func (w Work) Worker(ctx context.Context, id uuid.UUID) (Worker, error) {
+	worker, err := w.repo.Worker(ctx, id)
 	if err != nil {
 		return Worker{}, fmt.Errorf("get worker: %w", err)
 	}
 	return worker, nil
 }
 
-func (p Planner) Workers(ctx context.Context, filter WorkersFilter) ([]Worker, error) {
-	workers, err := p.repo.Workers(ctx, filter)
+func (w Work) Workers(ctx context.Context, filter WorkersFilter) ([]Worker, error) {
+	workers, err := w.repo.Workers(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list workers: %w", err)
 	}
 	return workers, nil
 }
 
-func (p Planner) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
+func (w Work) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
 	shift.ID = uuid.New()
-	err := p.repo.Transaction(ctx, func(repo Repository) error {
+	err := w.repo.Transaction(ctx, func(repo Repository) error {
 		shifts, err := repo.Shifts(ctx, ShiftsFilter{WorkerID: &shift.WorkerID, Date: &shift.Date})
 		if err != nil {
 			return fmt.Errorf("list shifts: %w", err)
@@ -103,8 +107,8 @@ func (p Planner) CreateShift(ctx context.Context, shift Shift) (Shift, error) {
 	return shift, nil
 }
 
-func (p Planner) Shifts(ctx context.Context, filter ShiftsFilter) ([]Shift, error) {
-	shifts, err := p.repo.Shifts(ctx, filter)
+func (w Work) Shifts(ctx context.Context, filter ShiftsFilter) ([]Shift, error) {
+	shifts, err := w.repo.Shifts(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list shift: %w", err)
 	}

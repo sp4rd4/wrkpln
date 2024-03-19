@@ -2,17 +2,25 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/sp4rd4/wrkpln/config"
 	handler "github.com/sp4rd4/wrkpln/handler/http"
+	"github.com/sp4rd4/wrkpln/planner"
+	"github.com/sp4rd4/wrkpln/repository/sqllite"
 	"golang.org/x/sync/errgroup"
 )
 
 func Start(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
-	h := handler.New(logger)
+	repo, err := sqllite.New(cfg.DBPath, cfg.DBSchemaPath)
+	if err != nil {
+		return fmt.Errorf("repository init: %w", err)
+	}
+	planner := planner.New(repo)
+	h := handler.New(logger, planner)
 
 	server := &http.Server{
 		Addr:           ":" + strconv.Itoa(cfg.Port),
@@ -25,7 +33,7 @@ func Start(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			return err
+			return fmt.Errorf("server listen: %w", err)
 		}
 		return nil
 	})
@@ -33,7 +41,10 @@ func Start(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		<-ctx.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
-		return server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("server shutdown: %w", err)
+		}
+		return nil
 	})
 
 	slog.Info("http service: started")
